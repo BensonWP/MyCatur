@@ -3,6 +3,10 @@ import 'ai.dart';
 import 'game_settings.dart';
 import 'piece.dart';
 
+/// Mode permainan terakhir. Disimpan agar beranda bisa menawarkan
+/// "Ulangi" tanpa lewat layar setup.
+enum PlayMode { ai, duo }
+
 /// Muat/simpan preferensi antar sesi. Kunci dibaca defensif: indeks enum
 /// dijaga dengan modulo supaya tidak crash kalau urutan enum berubah.
 class AppPrefs {
@@ -11,6 +15,7 @@ class AppPrefs {
   static const _animation = 'animation';
   static const _humanColor = 'human_color';
   static const _aiLevel = 'ai_level';
+  static const _playMode = 'play_mode';
 
   static Future<GameSettings> loadGame() async {
     final p = await SharedPreferences.getInstance();
@@ -48,5 +53,17 @@ class AppPrefs {
     final p = await SharedPreferences.getInstance();
     await p.setInt(_humanColor, color.index);
     await p.setInt(_aiLevel, level.index);
+  }
+
+  static Future<PlayMode?> loadPlayMode() async {
+    final p = await SharedPreferences.getInstance();
+    final i = p.getInt(_playMode);
+    if (i == null || i < 0 || i >= PlayMode.values.length) return null;
+    return PlayMode.values[i];
+  }
+
+  static Future<void> savePlayMode(PlayMode mode) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_playMode, mode.index);
   }
 }

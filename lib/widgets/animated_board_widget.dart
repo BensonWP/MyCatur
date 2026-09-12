@@ -77,31 +77,36 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
   int _displayRow(int r) => widget.flipped ? 7 - r : r;
   int _displayCol(int c) => widget.flipped ? 7 - c : c;
 
-  TextStyle _pieceStyle(Piece piece, double size) {
-    // Putih: glif filled diisi krem dengan ring tinta gelap, kontras
-    // di semua petak. Hitam: glif gelap pekat dengan ring krem tipis.
-    if (piece.color == PieceColor.white) {
-      return TextStyle(
+  // Bidak putih: isi putih cemerlang dengan outline ink tebal.
+  // Bidak hitam: isi ink pekat dengan outline putih tebal. Outline
+  // pakai foreground paint + stroke (dua lapis Text: stroke di
+  // belakang, fill di depan) supaya kedua warna tetap terbedakan
+  // di petak terang maupun gelap, tidak tipis seperti shadow 1px.
+  List<Widget> _pieceWidgets(Piece piece, double size) {
+    final white = piece.color == PieceColor.white;
+    final fill = white ? Colors.white : const Color(0xFF14100B);
+    final outline = white ? const Color(0xFF241A10) : Colors.white;
+    final strokeWidth = size * 0.055;
+    final stroke = Text(
+      piece.glyphSolid,
+      style: TextStyle(
         fontSize: size,
-        color: GoldTheme.onFrameText,
-        shadows: const [
-          Shadow(color: GoldTheme.ink, offset: Offset(0, 1), blurRadius: 0),
-          Shadow(color: GoldTheme.ink, offset: Offset(0, -1), blurRadius: 0),
-          Shadow(color: GoldTheme.ink, offset: Offset(1, 0), blurRadius: 0),
-          Shadow(color: GoldTheme.ink, offset: Offset(-1, 0), blurRadius: 0),
-        ],
-      );
-    }
-    return TextStyle(
-      fontSize: size,
-      color: const Color(0xFF14100B),
-      shadows: const [
-        Shadow(color: GoldTheme.onFrameText, offset: Offset(0, 1), blurRadius: 0),
-        Shadow(color: GoldTheme.onFrameText, offset: Offset(0, -1), blurRadius: 0),
-        Shadow(color: GoldTheme.onFrameText, offset: Offset(1, 0), blurRadius: 0),
-        Shadow(color: GoldTheme.onFrameText, offset: Offset(-1, 0), blurRadius: 0),
-      ],
+        fontFamily: GoldTheme.pieceFont,
+        foreground: Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth * 2
+          ..color = outline,
+      ),
     );
+    final body = Text(
+      piece.glyphSolid,
+      style: TextStyle(
+        fontSize: size,
+        fontFamily: GoldTheme.pieceFont,
+        color: fill,
+      ),
+    );
+    return [stroke, body];
   }
 
   @override
@@ -122,6 +127,7 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
       decoration: BoxDecoration(
         color: frame,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: GoldTheme.boardShadow,
       ),
       child: AspectRatio(
         aspectRatio: 1,
@@ -254,11 +260,11 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
                         top: _displayRow(r) * sq,
                         width: sq,
                         height: sq,
-                          child: IgnorePointer(
-                            child: Center(
-                              child: Text(
-                                widget.state.board[r][c]!.glyphSolid,
-                              style: _pieceStyle(
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: _pieceWidgets(
                                 widget.state.board[r][c]!,
                                 glyphSize,
                               ),
@@ -304,9 +310,10 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
                                 ),
                               if (piece != null)
                                 Center(
-                                  child: Text(
-                                    piece.glyphSolid,
-                                    style: _pieceStyle(piece, glyphSize),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children:
+                                        _pieceWidgets(piece, glyphSize),
                                   ),
                                 ),
                             ],

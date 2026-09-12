@@ -35,6 +35,9 @@ class Piece {
   /// Glif filled untuk kedua warna. Warna bidak dibedakan lewat
   /// TextStyle di widget papan, supaya konsisten di semua font Android
   /// (glif outline sering fallback ke emoji dan terlihat tipis).
+  /// Akhiran \uFE0E (variation selector-15) memaksa presentasi teks:
+  /// tanpa itu, font emoji Android merender glif sebagai emoji berwarna
+  /// yang mengabaikan TextStyle sepenuhnya.
   String get glyphSolid {
     const solid = {
       PieceType.king: '♚',
@@ -44,6 +47,6 @@ class Piece {
       PieceType.knight: '♞',
       PieceType.pawn: '♟',
     };
-    return solid[type]!;
+    return '${solid[type]!}\uFE0E';
   }
 }

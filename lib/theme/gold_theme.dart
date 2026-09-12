@@ -12,9 +12,19 @@ class GoldTheme {
   static const onFrameText = Color(0xFFF5EBD8);
   // Emas tua: AA (4.9:1) dengan teks krem di tombol primer di atas ivory.
   static const accent = Color(0xFF8A5D14);
+  // Status pilihan terisi: emas tua solid, teks putih cemerlang. AA.
+  static const selectedFill = Color(0xFF8A5D14);
+  static const onSelected = Colors.white;
+  // Border tenang untuk opsi tidak terpilih: walnut ~40%, cukup terlihat
+  // tanpa bersaing dengan aksen emas.
+  static const quietBorder = Color(0x667A4E2B);
   // Emas terang untuk elemen aksen di atas walnut (nav aktif).
   static const navActive = Color(0xFFD9A441);
   static const checkMark = Color(0xFFB3261E);
+  // Font bidak: subset Noto Sans Symbols 2 (OFL, assets/fonts/) hanya
+  // berisi 6 glif catur. Satu font di semua HP = tidak ada lagi
+  // fallback emoji yang warnanya di luar kendali aplikasi.
+  static const pieceFont = 'ChessGlyphs';
 
   // Varian kalem untuk tempo santai. Ivory lebih lembut dan aksen
   // diredupkan agar rasa tenang tanpa mengorbankan kontras.
@@ -23,6 +33,17 @@ class GoldTheme {
   static const calmLightSquare = Color(0xFFE6D2AE);
   static const calmDarkSquare = Color(0xFF6E4426);
   static const calmAccent = Color(0xFF9A6C1E);
+
+  // Bayangan papan: satu-satunya elevasi di layar permainan. Papan
+  // adalah objek kayu fisik di atas meja; semua elemen lain tetap datar
+  // supaya mata langsung jatuh ke papan.
+  static final boardShadow = [
+    BoxShadow(
+      color: ink.withValues(alpha: 0.28),
+      blurRadius: 18,
+      offset: const Offset(0, 6),
+    ),
+  ];
 
   // Skala spasi. Kelipatan 4, dipakai di semua layar agar ritme konsisten.
   static const gap4 = 4.0;
@@ -70,32 +91,39 @@ class GoldTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
+      // Modal (dialog, sheet, popup) seragam ivory terang dengan teks ink,
+      // sama seperti beranda: kontras 13:1, chip selected emas 4.9:1, dan
+      // tombol aksi tidak tenggelam ke latar.
       dialogTheme: DialogThemeData(
-        backgroundColor: frame,
+        backgroundColor: background,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusCard),
         ),
         titleTextStyle: const TextStyle(
-          color: onFrameText,
+          color: ink,
           fontWeight: FontWeight.w700,
           fontSize: 18,
         ),
         contentTextStyle: const TextStyle(
-          color: onFrameText,
+          color: ink,
           fontSize: 14,
           height: 1.5,
         ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: frame,
+        backgroundColor: background,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(radiusCard)),
         ),
         showDragHandle: true,
+        dragHandleColor: frame,
       ),
       popupMenuTheme: const PopupMenuThemeData(
-        color: frame,
-        textStyle: TextStyle(color: onFrameText, fontSize: 14),
+        color: background,
+        textStyle: TextStyle(color: ink, fontSize: 14),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: ink),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: accent,
@@ -117,11 +145,6 @@ class GoldTheme {
               borderRadius: BorderRadius.circular(radiusButton)),
           minimumSize: const Size(48, 48),
         ),
-      ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: frame,
-        selectedItemColor: navActive,
-        unselectedItemColor: onFrameText,
       ),
     );
   }

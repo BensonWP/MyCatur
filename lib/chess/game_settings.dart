@@ -51,11 +51,11 @@ extension ClockOptionExt on ClockOption {
 }
 
 class GameSettings {
-  Tempo tempo;
-  ClockOption clock;
-  bool animation;
+  final Tempo tempo;
+  final ClockOption clock;
+  final bool animation;
 
-  GameSettings({
+  const GameSettings({
     this.tempo = Tempo.santai,
     this.clock = ClockOption.tanpa,
     this.animation = true,

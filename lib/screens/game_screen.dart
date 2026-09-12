@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../chess/ai.dart';
-import '../chess/app_prefs.dart';
 import '../chess/chess_clock.dart';
 import '../chess/game_settings.dart';
 import '../chess/game_state.dart';
@@ -12,17 +11,20 @@ import '../chess/piece.dart';
 import '../chess/stats_store.dart';
 import '../theme/gold_theme.dart';
 import '../widgets/animated_board_widget.dart';
+import '../widgets/sheets.dart';
 
 class GameScreen extends StatefulWidget {
   final bool vsAi;
   final PieceColor humanColor;
   final AiLevel level;
+  final GameSettings settings;
 
   const GameScreen({
     super.key,
     required this.vsAi,
     this.humanColor = PieceColor.white,
     this.level = AiLevel.medium,
+    this.settings = const GameSettings(),
   });
 
   @override
@@ -33,7 +35,11 @@ class _GameScreenState extends State<GameScreen> {
   late GameState state;
   final List<GameState> _past = [];
   final List<ChessMove> _moves = [];
+  final List<PieceColor> _movers = [];
   final List<bool> _captures = [];
+  // Bidak yang dimakan sesuai urutan, untuk baris tangkapan di kartu
+  // pemain. Dihapus satu per satu saat undo, dikosongkan saat restart.
+  final List<Piece> _captured = [];
   int? selR;
   int? selC;
   List<ChessMove> targets = [];
@@ -43,10 +49,13 @@ class _GameScreenState extends State<GameScreen> {
   bool flipped = false;
   bool thinking = false;
   String? resultText;
-  GameSettings settings = GameSettings();
   ChessClock? clock;
   Timer? clockTimer;
   bool modalOpen = false;
+  // Salinan pengaturan di state supaya perubahan tempo/animasi dari
+  // sheet Pengaturan langsung berlaku tanpa restart. Jam tetap dari
+  // nilai awal karena waktu berjalan tidak bisa diubah di tengah main.
+  late GameSettings settings = widget.settings;
 
   @override
   void initState() {
@@ -62,22 +71,11 @@ class _GameScreenState extends State<GameScreen> {
         if (c.flagged != null) _onFlag(c.flagged!);
       });
     });
-    _loadSettings();
+    _initClock();
     if (widget.vsAi && state.turn != widget.humanColor) {
       _aiMove();
     }
   }
-
-  Future<void> _loadSettings() async {
-    final s = await AppPrefs.loadGame();
-    if (!mounted) return;
-    setState(() {
-      settings = s;
-      if (history.isEmpty && resultText == null) _initClock();
-    });
-  }
-
-  void _saveSettings() => unawaited(AppPrefs.saveGame(settings));
 
   void _initClock() {
     if (settings.clock == ClockOption.tanpa) {
@@ -150,7 +148,10 @@ class _GameScreenState extends State<GameScreen> {
               ListTile(
                 leading: Text(
                   _promoGlyph(t, state.turn),
-                  style: const TextStyle(fontSize: 28),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontFamily: GoldTheme.pieceFont,
+                  ),
                 ),
                 title: Text(_promoName(t)),
                 onTap: () => Navigator.of(context).pop(t),
@@ -193,10 +194,15 @@ class _GameScreenState extends State<GameScreen> {
     final sanText = state.san(m);
     final wasCapture =
         state.at(m.toR, m.toC) != null || m.isEnPassant;
+    final Piece? victim = m.isEnPassant
+        ? Piece(mover.opposite, PieceType.pawn)
+        : state.at(m.toR, m.toC);
     setState(() {
       _past.add(GameState.clone(state));
       _moves.add(m);
+      _movers.add(mover);
       _captures.add(wasCapture);
+      if (victim != null) _captured.add(victim);
       state.apply(m);
       lastMove = m;
       lastWasCapture = wasCapture;
@@ -220,14 +226,16 @@ class _GameScreenState extends State<GameScreen> {
     var restored = _past.removeLast();
     history.removeLast();
     _moves.removeLast();
-    _captures.removeLast();
+    _movers.removeLast();
+    if (_captures.removeLast()) _captured.removeLast();
     if (widget.vsAi &&
         restored.turn != widget.humanColor &&
         _past.isNotEmpty) {
       restored = _past.removeLast();
       history.removeLast();
       _moves.removeLast();
-      _captures.removeLast();
+      _movers.removeLast();
+      if (_captures.removeLast()) _captured.removeLast();
     }
     setState(() {
       state = restored;
@@ -374,7 +382,9 @@ class _GameScreenState extends State<GameScreen> {
       state = GameState();
       _past.clear();
       _moves.clear();
+      _movers.clear();
       _captures.clear();
+      _captured.clear();
       selR = selC = null;
       targets = [];
       lastMove = null;
@@ -436,134 +446,122 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  void _openSettings() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) {
-        final text = Theme.of(context).textTheme;
-        return SafeArea(
-          child: StatefulBuilder(
-            builder: (context, setSheet) => SingleChildScrollView(
-              padding: const EdgeInsets.all(GoldTheme.gap16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Pengaturan', style: text.titleLarge),
-                  const SizedBox(height: GoldTheme.gap12),
-                  Text('Tempo main.', style: text.titleSmall),
-                  const SizedBox(height: GoldTheme.gap8),
-                  Row(
-                    children: Tempo.values.map((t) {
-                      return Expanded(
-                        child: Padding(
-                          padding:
-                              const EdgeInsets.only(right: GoldTheme.gap8),
-                          child: OutlinedButton(
-                            onPressed: settings.tempo == t
-                                ? null
-                                : () {
-                                    setSheet(() {});
-                                    setState(() => settings.tempo = t);
-                                    _saveSettings();
-                                    Navigator.of(context).pop();
-                                    _openSettings();
-                                  },
-                            child: Text(t.label),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: GoldTheme.gap12),
-                  Text(
-                    'Jam catur. Mengganti jam memulai ulang permainan.',
-                    style: text.titleSmall,
-                  ),
-                  const SizedBox(height: GoldTheme.gap8),
-                  for (final c in ClockOption.values)
-                    Padding(
-                      padding:
-                          const EdgeInsets.only(bottom: GoldTheme.gap8),
-                      child: OutlinedButton(
-                        onPressed: settings.clock == c
-                            ? null
-                            : () {
-                                setState(() => settings.clock = c);
-                                _saveSettings();
-                                Navigator.of(context).pop();
-                                _restart();
-                              },
-                        child: Text(c.label),
-                      ),
-                    ),
-                  const SizedBox(height: GoldTheme.gap4),
-                  Text('Animasi.', style: text.titleSmall),
-                  const SizedBox(height: GoldTheme.gap8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: !settings.animation
-                              ? null
-                              : () {
-                                  setState(
-                                      () => settings.animation = true);
-                                  _saveSettings();
-                                  Navigator.of(context).pop();
-                                },
-                          child: const Text('Aktif'),
-                        ),
-                      ),
-                      const SizedBox(width: GoldTheme.gap8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: settings.animation
-                              ? null
-                              : () {
-                                  setState(
-                                      () => settings.animation = false);
-                                  _saveSettings();
-                                  Navigator.of(context).pop();
-                                },
-                          child: const Text('Mati'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: GoldTheme.gap8),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Tutup'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+  /// SAN langkah terakhir warna [color], tanpa nomor. Null bila belum jalan.
+  String? _lastSanFor(PieceColor color) {
+    for (var i = _moves.length - 1; i >= 0; i--) {
+      if (_movers[i] == color) {
+        final h = history[i];
+        final sp = h.indexOf(' ');
+        return sp >= 0 ? h.substring(sp + 1) : h;
+      }
+    }
+    return null;
+  }
+
+  /// Bidak lawan yang dimakan [color], termahal dulu.
+  List<Piece> _takenBy(PieceColor color) {
+    final list =
+        _captured.where((p) => p.color == color.opposite).toList();
+    list.sort(
+        (a, b) => pieceMaterial(b.type).compareTo(pieceMaterial(a.type)));
+    return list;
+  }
+
+  /// Selisih material [color] dalam pion, dari daftar tangkapan.
+  int _materialFor(PieceColor color) {
+    var score = 0;
+    for (final p in _captured) {
+      final v = pieceMaterial(p.type);
+      if (p.color == color.opposite) {
+        score += v;
+      } else {
+        score -= v;
+      }
+    }
+    return score ~/ 100;
+  }
+
+  /// Glif bidak kecil dua warna seperti di papan (isi + ring), supaya
+  /// hitam tetap terbaca di atas walnut dan putih tetap terbaca.
+  TextStyle _takenStyle(Piece piece) {
+    if (piece.color == PieceColor.white) {
+      return const TextStyle(
+        fontSize: 15,
+        color: GoldTheme.onFrameText,
+        shadows: [
+          Shadow(color: GoldTheme.ink, offset: Offset(0, 1), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(0, -1), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(1, 0), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(-1, 0), blurRadius: 0),
+        ],
+      );
+    }
+    return const TextStyle(
+      fontSize: 15,
+      color: Color(0xFF14100B),
+      shadows: [
+        Shadow(
+            color: GoldTheme.onFrameText,
+            offset: Offset(0, 1),
+            blurRadius: 0),
+        Shadow(
+            color: GoldTheme.onFrameText,
+            offset: Offset(0, -1),
+            blurRadius: 0),
+        Shadow(
+            color: GoldTheme.onFrameText,
+            offset: Offset(1, 0),
+            blurRadius: 0),
+        Shadow(
+            color: GoldTheme.onFrameText,
+            offset: Offset(-1, 0),
+            blurRadius: 0),
+      ],
     );
   }
 
-  String get _status {
-    if (resultText != null) return resultText!;
-    if (thinking) return 'Komputer sedang berpikir';
-    return state.turn == PieceColor.white ? 'Giliran Putih' : 'Giliran Hitam';
-  }
-
-  Widget _playerCard(PieceColor color) {
-    final text = Theme.of(context).textTheme;
-    final c = clock;
+  /// Strip pemain satu baris: nama + SAN terakhir, bidak tertangkapan,
+  /// dan jam. Pemain aktif: border emas, nama tebal, transisi 250ms.
+  Widget _playerStrip(PieceColor color) {
     final active = resultText == null && state.turn == color;
+    final isAi = widget.vsAi && color == aiColor;
     final name = widget.vsAi
         ? (color == widget.humanColor ? 'Kamu' : 'Komputer')
         : (color == PieceColor.white ? 'Putih' : 'Hitam');
-    final side =
-        color == PieceColor.white ? 'Putih' : 'Hitam';
-    return Container(
+    final sub = (isAi && thinking && resultText == null)
+        ? 'berpikir…'
+        : (_lastSanFor(color) ??
+            (widget.vsAi
+                ? (color == PieceColor.white ? 'Putih' : 'Hitam')
+                : 'Menunggu'));
+    final taken = _takenBy(color);
+    final shown = taken.take(7).toList();
+    final rest = taken.length - shown.length;
+    final pawns = _materialFor(color);
+    final c = clock;
+    final ms = c == null
+        ? null
+        : (color == PieceColor.white ? c.whiteMs : c.blackMs);
+    final urgent =
+        ms != null && ms < 10000 && ms > 0 && resultText == null;
+    const cardName = TextStyle(
+      color: GoldTheme.onFrameText,
+      fontSize: 15,
+    );
+    const cardSub = TextStyle(
+      color: GoldTheme.onFrameText,
+      fontSize: 11,
+    );
+    const cardClock = TextStyle(
+      color: GoldTheme.onFrameText,
+      fontWeight: FontWeight.w700,
+      fontSize: 18,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
       padding: const EdgeInsets.symmetric(
         horizontal: GoldTheme.gap12,
-        vertical: GoldTheme.gap8,
+        vertical: GoldTheme.gap4,
       ),
       decoration: BoxDecoration(
         color: GoldTheme.frame,
@@ -587,24 +585,186 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
           const SizedBox(width: GoldTheme.gap8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(name, style: text.titleMedium),
-              if (widget.vsAi) Text(side, style: text.bodySmall),
-            ],
-          ),
-          const Spacer(),
-          if (c != null)
-            Text(
-              ChessClock.format(
-                color == PieceColor.white ? c.whiteMs : c.blackMs,
-              ),
-              style: text.titleLarge,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  style: cardName.copyWith(
+                    fontWeight:
+                        active ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+                Text(sub, style: cardSub),
+              ],
             ),
+          ),
+          if (shown.isNotEmpty || pawns > 0) ...[
+            Flexible(
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                children: [
+                  for (final p in shown)
+                    Text(p.glyphSolid, style: _takenStyle(p)),
+                  if (rest > 0) Text('+$rest', style: cardSub),
+                  if (pawns > 0) Text(' +$pawns', style: cardSub),
+                ],
+              ),
+            ),
+            const SizedBox(width: GoldTheme.gap8),
+          ],
+          if (ms != null)
+            urgent
+                ? Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: GoldTheme.gap8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: GoldTheme.checkMark,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      ChessClock.format(ms),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  )
+                : Text(ChessClock.format(ms), style: cardClock),
         ],
       ),
+    );
+  }
+
+  /// Empat aksi permainan. Dipakai sebagai baris di portrait dan
+  /// sebagai Wrap di panel landscape yang sempit.
+  List<Widget> _actionButtons() {
+    return [
+      IconButton(
+        icon: const Icon(Icons.arrow_back, size: 20),
+        color: GoldTheme.ink,
+        tooltip: 'Kembali',
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      IconButton(
+        icon: const Icon(Icons.undo, size: 20),
+        color: GoldTheme.ink,
+        tooltip: 'Urungkan',
+        onPressed: canUndo ? _undo : null,
+      ),
+      IconButton(
+        icon: const Icon(Icons.history, size: 20),
+        color: GoldTheme.ink,
+        tooltip: 'Riwayat',
+        onPressed: _openHistory,
+      ),
+      PopupMenuButton<String>(
+        iconSize: 20,
+        color: GoldTheme.frame,
+        iconColor: GoldTheme.ink,
+        tooltip: 'Opsi lain',
+        onSelected: (value) {
+          if (value == 'baru') {
+            _restart();
+          } else if (value == 'putar') {
+            setState(() => flipped = !flipped);
+          } else if (value == 'menyerah') {
+            _resign();
+          } else if (value == 'pengaturan') {
+            openSettingsSheet(
+              context,
+              current: settings,
+              onApply: (next) => setState(() => settings = next),
+            );
+          }
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem(
+            value: 'baru',
+            child: Text('Main baru'),
+          ),
+          PopupMenuItem(
+            value: 'putar',
+            child: Text('Putar papan'),
+          ),
+          PopupMenuItem(
+            value: 'pengaturan',
+            child: Text('Pengaturan'),
+          ),
+          PopupMenuItem(
+            value: 'menyerah',
+            child: Text('Menyerah'),
+          ),
+        ],
+      ),
+    ];
+  }
+
+  /// Baris status + aksi di bawah papan. Status dibacakan ulang oleh
+  /// pembaca layar setiap berubah (liveRegion); aksi cukup 4 tombol
+  /// dan satu menu supaya muat di layar sempit.
+  Widget _bottomBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        GoldTheme.gap12,
+        GoldTheme.gap4,
+        GoldTheme.gap4,
+        GoldTheme.gap8,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Semantics(
+              liveRegion: true,
+              child: _statusLine(),
+            ),
+          ),
+          ..._actionButtons(),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusLine() {
+    final text = Theme.of(context).textTheme;
+    if (resultText != null) {
+      return Text(resultText!, style: text.titleSmall);
+    }
+    if (thinking) {
+      return Text('Komputer sedang berpikir', style: text.titleSmall);
+    }
+    final turnGlyph =
+        Piece(state.turn, PieceType.king).glyphSolid;
+    final check = state.isInCheck(state.turn);
+    final label = state.turn == PieceColor.white
+        ? 'Giliran Putih'
+        : 'Giliran Hitam';
+    return Row(
+      children: [
+        Text(
+          turnGlyph,
+          style: TextStyle(
+            fontSize: 18,
+            color: state.turn == PieceColor.white
+                ? GoldTheme.frame
+                : GoldTheme.ink,
+          ),
+        ),
+        const SizedBox(width: GoldTheme.gap8),
+        Expanded(
+          child: Text(
+            check ? '$label, skak!' : label,
+            style: text.titleMedium?.copyWith(
+              color: check ? GoldTheme.checkMark : GoldTheme.ink,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -624,94 +784,9 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  Widget _topBar() {
-    final text = Theme.of(context).textTheme;
-    return Container(
-      color: GoldTheme.ink.withValues(alpha: 0.12),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, size: 20),
-            color: GoldTheme.ink,
-            tooltip: 'Kembali',
-            visualDensity: VisualDensity.compact,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          Expanded(
-            child: Text(
-              widget.vsAi ? 'Lawan komputer' : 'Main berdua',
-              style: text.titleSmall,
-            ),
-          ),
-          if (thinking)
-            const Padding(
-              padding: EdgeInsets.only(right: GoldTheme.gap4),
-              child: SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.undo, size: 20),
-            color: GoldTheme.ink,
-            tooltip: 'Urungkan',
-            visualDensity: VisualDensity.compact,
-            onPressed: canUndo ? _undo : null,
-          ),
-          IconButton(
-            icon: const Icon(Icons.history, size: 20),
-            color: GoldTheme.ink,
-            tooltip: 'Riwayat',
-            visualDensity: VisualDensity.compact,
-            onPressed: _openHistory,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings, size: 20),
-            color: GoldTheme.ink,
-            tooltip: 'Pengaturan',
-            visualDensity: VisualDensity.compact,
-            onPressed: _openSettings,
-          ),
-          PopupMenuButton<String>(
-            iconSize: 20,
-            color: GoldTheme.frame,
-            iconColor: GoldTheme.ink,
-            tooltip: 'Opsi lain',
-            onSelected: (value) {
-              if (value == 'baru') {
-                _restart();
-              } else if (value == 'putar') {
-                setState(() => flipped = !flipped);
-              } else if (value == 'menyerah') {
-                _resign();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'baru',
-                child: Text('Main baru'),
-              ),
-              PopupMenuItem(
-                value: 'putar',
-                child: Text('Putar papan'),
-              ),
-              PopupMenuItem(
-                value: 'menyerah',
-                child: Text('Menyerah'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _portrait() {
-    final text = Theme.of(context).textTheme;
     return Column(
       children: [
-        _topBar(),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             GoldTheme.gap8,
@@ -719,12 +794,15 @@ class _GameScreenState extends State<GameScreen> {
             GoldTheme.gap8,
             GoldTheme.gap4,
           ),
-          child: _playerCard(_topColor),
+          child: _playerStrip(_topColor),
         ),
         Expanded(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(GoldTheme.gap4),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 2,
+                vertical: GoldTheme.gap4,
+              ),
               child: _board(),
             ),
           ),
@@ -734,17 +812,11 @@ class _GameScreenState extends State<GameScreen> {
             GoldTheme.gap8,
             GoldTheme.gap4,
             GoldTheme.gap8,
-            GoldTheme.gap8,
+            GoldTheme.gap4,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _playerCard(_topColor.opposite),
-              const SizedBox(height: GoldTheme.gap4),
-              Text(_status, style: text.bodySmall),
-            ],
-          ),
+          child: _playerStrip(_topColor.opposite),
         ),
+        _bottomBar(),
       ],
     );
   }
@@ -756,16 +828,18 @@ class _GameScreenState extends State<GameScreen> {
         : history.sublist(history.length - 3);
     return Column(
       children: [
-        _topBar(),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(GoldTheme.gap4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 2,
+                      vertical: GoldTheme.gap4,
+                    ),
                     child: AspectRatio(
                       aspectRatio: 1,
                       child: _board(),
@@ -785,18 +859,23 @@ class _GameScreenState extends State<GameScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _playerCard(_topColor),
+                      _playerStrip(_topColor),
                       const SizedBox(height: GoldTheme.gap8),
-                      _playerCard(_topColor.opposite),
+                      _playerStrip(_topColor.opposite),
                       const SizedBox(height: GoldTheme.gap8),
-                      Text(_status, style: text.bodySmall),
-                      const SizedBox(height: GoldTheme.gap8),
-                      Text('Langkah terakhir.', style: text.titleSmall),
+                      Text('Langkah terakhir', style: text.titleSmall),
                       const SizedBox(height: GoldTheme.gap4),
                       if (recent.isEmpty)
                         Text('Belum ada langkah.', style: text.bodyMedium),
                       for (final h in recent)
                         Text(h, style: text.bodyMedium),
+                      const SizedBox(height: GoldTheme.gap8),
+                      Semantics(
+                        liveRegion: true,
+                        child: _statusLine(),
+                      ),
+                      const SizedBox(height: GoldTheme.gap4),
+                      Wrap(children: _actionButtons()),
                     ],
                   ),
                 ),

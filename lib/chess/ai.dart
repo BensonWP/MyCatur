@@ -38,6 +38,9 @@ const _values = {
   PieceType.king: 0,
 };
 
+/// Nilai material satu bidak untuk papan skor di kartu pemain.
+int pieceMaterial(PieceType t) => _values[t] ?? 0;
+
 int evaluateBoard(GameState s) {
   var score = 0;
   for (var r = 0; r < 8; r++) {
