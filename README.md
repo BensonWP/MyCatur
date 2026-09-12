@@ -3,7 +3,7 @@
 Aplikasi catur kayu untuk Android, dibuat dengan Flutter. Main berdua di
 satu HP atau lawan komputer offline, dengan aturan lengkap (rokade,
 en passant, promosi), jam catur, riwayat notasi SAN, dan statistik di
-perangkat.
+perangkat. Tema terang ivory dengan papan kayu.
 
 ## Jalan cepat
 

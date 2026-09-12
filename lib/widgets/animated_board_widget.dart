@@ -78,35 +78,28 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
   int _displayCol(int c) => widget.flipped ? 7 - c : c;
 
   TextStyle _pieceStyle(Piece piece, double size) {
+    // Putih: glif filled diisi krem dengan ring tinta gelap, kontras
+    // di semua petak. Hitam: glif gelap pekat dengan ring krem tipis.
     if (piece.color == PieceColor.white) {
       return TextStyle(
         fontSize: size,
-        color: GoldTheme.creamText,
-        shadows: [
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            offset: const Offset(0, 1),
-            blurRadius: 1,
-          ),
+        color: GoldTheme.onFrameText,
+        shadows: const [
+          Shadow(color: GoldTheme.ink, offset: Offset(0, 1), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(0, -1), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(1, 0), blurRadius: 0),
+          Shadow(color: GoldTheme.ink, offset: Offset(-1, 0), blurRadius: 0),
         ],
       );
     }
-    // Bidak hitam: glif filled gelap dengan cincin krem supaya terbaca
-    // di petak terang maupun gelap.
-    const ring = GoldTheme.creamText;
     return TextStyle(
       fontSize: size,
       color: const Color(0xFF14100B),
       shadows: const [
-        Shadow(color: ring, offset: Offset(0, 1), blurRadius: 0),
-        Shadow(color: ring, offset: Offset(0, -1), blurRadius: 0),
-        Shadow(color: ring, offset: Offset(1, 0), blurRadius: 0),
-        Shadow(color: ring, offset: Offset(-1, 0), blurRadius: 0),
-        Shadow(
-          color: Color(0x99000000),
-          offset: Offset(0, 1),
-          blurRadius: 2,
-        ),
+        Shadow(color: GoldTheme.onFrameText, offset: Offset(0, 1), blurRadius: 0),
+        Shadow(color: GoldTheme.onFrameText, offset: Offset(0, -1), blurRadius: 0),
+        Shadow(color: GoldTheme.onFrameText, offset: Offset(1, 0), blurRadius: 0),
+        Shadow(color: GoldTheme.onFrameText, offset: Offset(-1, 0), blurRadius: 0),
       ],
     );
   }
@@ -303,7 +296,7 @@ class _AnimatedBoardWidgetState extends State<AnimatedBoardWidget>
                                   child: Container(
                                     decoration: BoxDecoration(
                                       border: Border.all(
-                                        color: GoldTheme.creamText,
+                                          color: GoldTheme.onFrameText,
                                         width: 2,
                                       ),
                                     ),

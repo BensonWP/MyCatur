@@ -79,30 +79,40 @@ class _StatsScreenState extends State<StatsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: Row(
-            children: [
-              if (first > 0)
-                Expanded(
-                  flex: first,
-                  child: Container(height: 8, color: firstColor),
-                ),
-              if (second > 0)
-                Expanded(
-                  flex: second,
-                  child: Container(
-                    height: 8,
-                    color: GoldTheme.creamText.withValues(alpha: 0.4),
+        // Batas tinta tipis: segmen krem (Putih/seri) tetap terbaca
+        // di latar ivory.
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+                color: GoldTheme.ink.withValues(alpha: 0.25)),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Row(
+              children: [
+                if (first > 0)
+                  Expanded(
+                    flex: first,
+                    child: Container(height: 8, color: firstColor),
                   ),
-                ),
-              if (third > 0)
-                Expanded(
-                  flex: third,
-                  child: Container(
-                      height: 8, color: Colors.black.withValues(alpha: 0.6)),
-                ),
-            ],
+                if (second > 0)
+                  Expanded(
+                    flex: second,
+                    child: Container(
+                      height: 8,
+                      color: GoldTheme.ink.withValues(alpha: 0.35),
+                    ),
+                  ),
+                if (third > 0)
+                  Expanded(
+                    flex: third,
+                    child: Container(
+                        height: 8,
+                        color: GoldTheme.ink.withValues(alpha: 0.9)),
+                  ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: GoldTheme.gap4),
@@ -164,7 +174,7 @@ class _StatsScreenState extends State<StatsScreen> {
                   first: store.twoWhite,
                   second: store.twoDraw,
                   third: store.twoBlack,
-                  firstColor: GoldTheme.creamText,
+                  firstColor: GoldTheme.onFrameText,
                   caption:
                       'Putih ${store.twoWhite}, Seri ${store.twoDraw}, Hitam ${store.twoBlack}.',
                 ),

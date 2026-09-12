@@ -581,9 +581,9 @@ class _GameScreenState extends State<GameScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: color == PieceColor.white
-                  ? GoldTheme.creamText
+                  ? GoldTheme.onFrameText
                   : Colors.black,
-              border: Border.all(color: GoldTheme.creamText),
+              border: Border.all(color: GoldTheme.onFrameText),
             ),
           ),
           const SizedBox(width: GoldTheme.gap8),
@@ -627,12 +627,12 @@ class _GameScreenState extends State<GameScreen> {
   Widget _topBar() {
     final text = Theme.of(context).textTheme;
     return Container(
-      color: Colors.black.withValues(alpha: 0.45),
+      color: GoldTheme.ink.withValues(alpha: 0.12),
       child: Row(
         children: [
           IconButton(
             icon: const Icon(Icons.arrow_back, size: 20),
-            color: GoldTheme.creamText,
+            color: GoldTheme.ink,
             tooltip: 'Kembali',
             visualDensity: VisualDensity.compact,
             onPressed: () => Navigator.of(context).pop(),
@@ -654,27 +654,29 @@ class _GameScreenState extends State<GameScreen> {
             ),
           IconButton(
             icon: const Icon(Icons.undo, size: 20),
-            color: GoldTheme.creamText,
+            color: GoldTheme.ink,
             tooltip: 'Urungkan',
             visualDensity: VisualDensity.compact,
             onPressed: canUndo ? _undo : null,
           ),
           IconButton(
             icon: const Icon(Icons.history, size: 20),
-            color: GoldTheme.creamText,
+            color: GoldTheme.ink,
             tooltip: 'Riwayat',
             visualDensity: VisualDensity.compact,
             onPressed: _openHistory,
           ),
           IconButton(
             icon: const Icon(Icons.settings, size: 20),
-            color: GoldTheme.creamText,
+            color: GoldTheme.ink,
             tooltip: 'Pengaturan',
             visualDensity: VisualDensity.compact,
             onPressed: _openSettings,
           ),
           PopupMenuButton<String>(
             iconSize: 20,
+            color: GoldTheme.frame,
+            iconColor: GoldTheme.ink,
             tooltip: 'Opsi lain',
             onSelected: (value) {
               if (value == 'baru') {

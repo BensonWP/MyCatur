@@ -1,24 +1,28 @@
 import 'package:flutter/material.dart';
 
-// Token Emas Pesta. Emas diambil dari mahkota logo, dipakai sebagai
-// satu-satunya aksen untuk pilihan, tombol primer, dan nav aktif.
+// Token Tema Ivory. Latar terang krem-ivori, bingkai papan walnut,
+// tinta gelap untuk teks. Emas gelap adalah satu-satunya aksen:
+// pilihan, target langkah, tombol primer, dan nav aktif.
 class GoldTheme {
-  static const background = Color(0xFF171006);
-  static const frame = Color(0xFF3E2A1A);
-  static const lightSquare = Color(0xFFF0DDAE);
+  static const background = Color(0xFFF5EDDC);
+  static const frame = Color(0xFF7A4E2B);
+  static const lightSquare = Color(0xFFEEDBB4);
   static const darkSquare = Color(0xFF7A4E2B);
-  static const creamText = Color(0xFFF7ECD4);
-  static const darkText = Color(0xFF1A120B);
-  static const accent = Color(0xFFF2B705);
+  static const ink = Color(0xFF241A10);
+  static const onFrameText = Color(0xFFF5EBD8);
+  // Emas tua: AA (4.9:1) dengan teks krem di tombol primer di atas ivory.
+  static const accent = Color(0xFF8A5D14);
+  // Emas terang untuk elemen aksen di atas walnut (nav aktif).
+  static const navActive = Color(0xFFD9A441);
   static const checkMark = Color(0xFFB3261E);
 
-  // Varian kalem untuk tempo santai. Latar digelapkan dan emas
+  // Varian kalem untuk tempo santai. Ivory lebih lembut dan aksen
   // diredupkan agar rasa tenang tanpa mengorbankan kontras.
-  static const calmBackground = Color(0xFF100C07);
-  static const calmFrame = Color(0xFF2A1D11);
-  static const calmLightSquare = Color(0xFFD9C49C);
-  static const calmDarkSquare = Color(0xFF5F3B22);
-  static const calmAccent = Color(0xFFC9960A);
+  static const calmBackground = Color(0xFFFAF4E8);
+  static const calmFrame = Color(0xFF855630);
+  static const calmLightSquare = Color(0xFFE6D2AE);
+  static const calmDarkSquare = Color(0xFF6E4426);
+  static const calmAccent = Color(0xFF9A6C1E);
 
   // Skala spasi. Kelipatan 4, dipakai di semua layar agar ritme konsisten.
   static const gap4 = 4.0;
@@ -34,33 +38,33 @@ class GoldTheme {
     return ThemeData(
       useMaterial3: true,
       scaffoldBackgroundColor: background,
-      colorScheme: const ColorScheme.dark(
-        primary: accent,
-        onPrimary: darkText,
+      colorScheme: const ColorScheme.light(
+        primary: frame,
+        onPrimary: onFrameText,
         surface: background,
-        onSurface: creamText,
+        onSurface: ink,
       ),
       textTheme: const TextTheme(
         displaySmall: TextStyle(
-          color: creamText,
+          color: ink,
           fontWeight: FontWeight.w700,
           fontSize: 36,
         ),
         headlineSmall: TextStyle(
-          color: creamText,
+          color: ink,
           fontWeight: FontWeight.w700,
           fontSize: 28,
         ),
         titleLarge: TextStyle(
-          color: creamText,
+          color: ink,
           fontWeight: FontWeight.w700,
           fontSize: 18,
         ),
-        titleMedium: TextStyle(color: creamText, fontSize: 16),
-        titleSmall: TextStyle(color: creamText, fontSize: 13),
-        bodyLarge: TextStyle(color: creamText, fontSize: 15),
-        bodyMedium: TextStyle(color: creamText, fontSize: 14, height: 1.5),
-        bodySmall: TextStyle(color: creamText, fontSize: 12),
+        titleMedium: TextStyle(color: ink, fontSize: 16),
+        titleSmall: TextStyle(color: ink, fontSize: 13),
+        bodyLarge: TextStyle(color: ink, fontSize: 15),
+        bodyMedium: TextStyle(color: ink, fontSize: 14, height: 1.5),
+        bodySmall: TextStyle(color: ink, fontSize: 12),
         labelLarge: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
@@ -72,12 +76,12 @@ class GoldTheme {
           borderRadius: BorderRadius.circular(radiusCard),
         ),
         titleTextStyle: const TextStyle(
-          color: creamText,
+          color: onFrameText,
           fontWeight: FontWeight.w700,
           fontSize: 18,
         ),
         contentTextStyle: const TextStyle(
-          color: creamText,
+          color: onFrameText,
           fontSize: 14,
           height: 1.5,
         ),
@@ -91,7 +95,7 @@ class GoldTheme {
       ),
       popupMenuTheme: const PopupMenuThemeData(
         color: frame,
-        textStyle: TextStyle(color: creamText, fontSize: 14),
+        textStyle: TextStyle(color: onFrameText, fontSize: 14),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
         color: accent,
@@ -99,7 +103,7 @@ class GoldTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
-          foregroundColor: darkText,
+          foregroundColor: onFrameText,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radiusButton)),
           minimumSize: const Size(48, 48),
@@ -107,8 +111,8 @@ class GoldTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: creamText,
-          side: const BorderSide(color: creamText),
+          foregroundColor: ink,
+          side: const BorderSide(color: accent),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radiusButton)),
           minimumSize: const Size(48, 48),
@@ -116,8 +120,8 @@ class GoldTheme {
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: frame,
-        selectedItemColor: accent,
-        unselectedItemColor: creamText,
+        selectedItemColor: navActive,
+        unselectedItemColor: onFrameText,
       ),
     );
   }
