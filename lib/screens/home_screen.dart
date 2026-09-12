@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../chess/ai.dart';
+import '../chess/app_prefs.dart';
 import '../chess/game_state.dart';
 import '../chess/move.dart';
 import '../chess/piece.dart';
@@ -21,30 +22,15 @@ class _HomeScreenState extends State<HomeScreen> {
   GameState preview = GameState();
   ChessMove? demoMove;
   bool demoCapture = false;
-  int visibleBlocks = 0;
-  Timer? _entranceTimer;
   Timer? _demoTimer;
-
-  static const int _blockCount = 5;
 
   @override
   void initState() {
     super.initState();
+    _loadPrefs();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (MediaQuery.of(context).disableAnimations) {
-        setState(() => visibleBlocks = _blockCount);
-        return;
-      }
-      _entranceTimer =
-          Timer.periodic(const Duration(milliseconds: 80), (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() => visibleBlocks++);
-        if (visibleBlocks >= _blockCount) timer.cancel();
-      });
+      if (MediaQuery.of(context).disableAnimations) return;
       _demoTimer =
           Timer.periodic(const Duration(milliseconds: 1400), (_) {
         _demoStep();
@@ -52,13 +38,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  Future<void> _loadPrefs() async {
+    final color = await AppPrefs.loadHumanColor();
+    final aiLevel = await AppPrefs.loadAiLevel();
+    if (!mounted) return;
+    setState(() {
+      humanColor = color;
+      level = aiLevel;
+    });
+  }
+
+  void _savePrefs() => unawaited(AppPrefs.saveHome(humanColor, level));
+
   void _demoStep() {
     if (!mounted) return;
     if (ModalRoute.of(context)?.isCurrent != true) return;
-    if (MediaQuery.of(context).disableAnimations) {
-      _demoTimer?.cancel();
-      return;
-    }
     if (preview.result() != GameResult.ongoing) {
       setState(() {
         preview = GameState();
@@ -83,231 +77,148 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _entranceTimer?.cancel();
     _demoTimer?.cancel();
     super.dispose();
   }
 
-  Widget _block(int index, Widget child) {
-    final visible = visibleBlocks > index;
-    return AnimatedSlide(
-      offset: visible ? Offset.zero : const Offset(0, 0.15),
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
-      child: AnimatedOpacity(
-        opacity: visible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 250),
-        child: child,
+  void _startAiGame() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GameScreen(
+          vsAi: true,
+          humanColor: humanColor,
+          level: level,
+        ),
+      ),
+    );
+  }
+
+  void _startTwoPlayerGame() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const GameScreen(vsAi: false),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(GoldTheme.gap20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _block(
-                0,
-                const Column(
+              const SizedBox(height: GoldTheme.gap8),
+              Text('MyCatur', style: text.displaySmall),
+              const SizedBox(height: GoldTheme.gap8),
+              Text(
+                'Papan kayu di HPmu. Main berdua atau lawan komputer offline.',
+                style: text.bodyLarge,
+              ),
+              const SizedBox(height: GoldTheme.gap20),
+              IgnorePointer(
+                child: AnimatedBoardWidget(
+                  state: preview,
+                  selectedR: null,
+                  selectedC: null,
+                  targets: const [],
+                  lastMove: demoMove,
+                  lastWasCapture: demoCapture,
+                  flipped: false,
+                  onTap: (_, __) {},
+                ),
+              ),
+              const SizedBox(height: GoldTheme.gap20),
+              Container(
+                padding: const EdgeInsets.all(GoldTheme.gap16),
+                decoration: BoxDecoration(
+                  color: GoldTheme.frame,
+                  borderRadius:
+                      BorderRadius.circular(GoldTheme.radiusCard),
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SizedBox(height: 8),
+                    Text('Lawan komputer', style: text.titleLarge),
+                    const SizedBox(height: GoldTheme.gap4),
                     Text(
-                      'MyCatur',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      'Atur warna dan level, langsung main.',
+                      style: text.titleSmall,
                     ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Papan kayu di HPmu. Main berdua atau lawan komputer offline.',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              _block(
-                1,
-                IgnorePointer(
-                  child: AnimatedBoardWidget(
-                    state: preview,
-                    selectedR: null,
-                    selectedC: null,
-                    targets: const [],
-                    lastMove: demoMove,
-                    lastWasCapture: demoCapture,
-                    flipped: false,
-                    onTap: (_, __) {},
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _block(
-                2,
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: GoldTheme.frame,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Lawan komputer',
-                        style: TextStyle(
-                          color: GoldTheme.creamText,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Atur warna dan level, langsung main.',
-                        style: TextStyle(
-                          color: GoldTheme.creamText,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed:
-                                  humanColor == PieceColor.white
-                                      ? null
-                                      : () => setState(() =>
-                                          humanColor = PieceColor.white),
-                              child: const Text('Putih'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed:
-                                  humanColor == PieceColor.black
-                                      ? null
-                                      : () => setState(() =>
-                                          humanColor = PieceColor.black),
-                              child: const Text('Hitam'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: AiLevel.values.map((l) {
-                          return Expanded(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.only(right: 8),
-                              child: OutlinedButton(
-                                onPressed: level == l
+                    const SizedBox(height: GoldTheme.gap12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed:
+                                humanColor == PieceColor.white
                                     ? null
-                                    : () =>
-                                        setState(() => level = l),
-                                child: Text(l.label),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => GameScreen(
-                                vsAi: true,
-                                humanColor: humanColor,
-                                level: level,
-                              ),
-                            ),
-                          );
-                        },
-                        child: const Text('Mulai lawan komputer'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _block(
-                3,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      'Dua orang, satu HP.',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 13,
-                      ),
+                                    : () {
+                                        setState(() => humanColor =
+                                            PieceColor.white);
+                                        _savePrefs();
+                                      },
+                            child: const Text('Putih'),
+                          ),
+                        ),
+                        const SizedBox(width: GoldTheme.gap12),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed:
+                                humanColor == PieceColor.black
+                                    ? null
+                                    : () {
+                                        setState(() => humanColor =
+                                            PieceColor.black);
+                                        _savePrefs();
+                                      },
+                            child: const Text('Hitam'),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                const GameScreen(vsAi: false),
+                    const SizedBox(height: GoldTheme.gap8),
+                    Row(
+                      children: AiLevel.values.map((l) {
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                                right: GoldTheme.gap8),
+                            child: OutlinedButton(
+                              onPressed: level == l
+                                  ? null
+                                  : () {
+                                      setState(() => level = l);
+                                      _savePrefs();
+                                    },
+                              child: Text(l.label),
+                            ),
                           ),
                         );
-                      },
-                      child: const Text('Main berdua'),
+                      }).toList(),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      '1. Pilih mode.',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 13,
-                        height: 1.7,
-                      ),
-                    ),
-                    const Text(
-                      '2. Atur warna dan level.',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 13,
-                        height: 1.7,
-                      ),
-                    ),
-                    const Text(
-                      '3. Mainkan.',
-                      style: TextStyle(
-                        color: GoldTheme.creamText,
-                        fontSize: 13,
-                        height: 1.7,
-                      ),
+                    const SizedBox(height: GoldTheme.gap12),
+                    ElevatedButton(
+                      onPressed: _startAiGame,
+                      child: const Text('Mulai lawan komputer'),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              _block(
-                4,
-                const Text(
-                  'Rokade, en passant, dan promosi didukung.',
-                  style: TextStyle(
-                    color: GoldTheme.creamText,
-                    fontSize: 12,
-                  ),
-                ),
+              const SizedBox(height: GoldTheme.gap12),
+              Text(
+                'Dua orang, satu HP. Rokade, en passant, dan promosi didukung.',
+                style: text.titleSmall,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: GoldTheme.gap8),
+              OutlinedButton(
+                onPressed: _startTwoPlayerGame,
+                child: const Text('Main berdua'),
+              ),
+              const SizedBox(height: GoldTheme.gap8),
             ],
           ),
         ),

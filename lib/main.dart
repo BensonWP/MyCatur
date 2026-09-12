@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'chess/stats_store.dart';
 import 'screens/splash_screen.dart';
 import 'theme/gold_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await StatsStore.instance.load();
   runApp(const MyCaturApp());
 }
 

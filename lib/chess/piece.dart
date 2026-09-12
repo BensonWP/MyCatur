@@ -31,4 +31,19 @@ class Piece {
     };
     return color == PieceColor.white ? white[type]! : black[type]!;
   }
+
+  /// Glif filled untuk kedua warna. Warna bidak dibedakan lewat
+  /// TextStyle di widget papan, supaya konsisten di semua font Android
+  /// (glif outline sering fallback ke emoji dan terlihat tipis).
+  String get glyphSolid {
+    const solid = {
+      PieceType.king: '♚',
+      PieceType.queen: '♛',
+      PieceType.rook: '♜',
+      PieceType.bishop: '♝',
+      PieceType.knight: '♞',
+      PieceType.pawn: '♟',
+    };
+    return solid[type]!;
+  }
 }

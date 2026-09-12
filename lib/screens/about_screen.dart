@@ -6,51 +6,33 @@ class AboutScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(GoldTheme.gap20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 24),
+              const SizedBox(height: GoldTheme.gap24),
               Image.asset(
-                'logo.png',
+                'assets/logo.png',
                 width: 120,
                 height: 120,
                 semanticLabel: 'Logo MyCatur',
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'MyCatur',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Versi 1.0.0.',
-                style: TextStyle(
-                    color: GoldTheme.creamText, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              const Text(
+              const SizedBox(height: GoldTheme.gap16),
+              Text('MyCatur', style: text.headlineSmall),
+              const SizedBox(height: GoldTheme.gap4),
+              Text('Versi 1.0.0.', style: text.titleSmall),
+              const SizedBox(height: GoldTheme.gap12),
+              Text(
                 'Main catur berdua di satu HP atau lawan komputer offline, dengan aturan lengkap dan jam catur.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 14,
-                  height: 1.6,
-                ),
+                style: text.bodyMedium,
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Dibuat dengan Flutter.',
-                style: TextStyle(
-                    color: GoldTheme.creamText, fontSize: 13),
-              ),
+              const SizedBox(height: GoldTheme.gap12),
+              Text('Dibuat dengan Flutter.', style: text.titleSmall),
             ],
           ),
         ),

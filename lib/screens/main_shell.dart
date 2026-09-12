@@ -14,12 +14,12 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int index = 0;
 
-  static const _pages = [
-    HomeScreen(),
-    HowToPlayScreen(),
-    StatsScreen(),
-    AboutScreen(),
-  ];
+  List<Widget> get _pages => [
+        const HomeScreen(),
+        const HowToPlayScreen(),
+        StatsScreen(visible: index == 2),
+        const AboutScreen(),
+      ];
 
   @override
   Widget build(BuildContext context) {

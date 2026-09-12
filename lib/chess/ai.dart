@@ -94,7 +94,7 @@ int _search(GameState s, int depth, int alpha, int beta, bool maximizing) {
   if (res == GameResult.whiteWins) return 100000;
   if (res == GameResult.blackWins) return -100000;
   if (res != GameResult.ongoing) return 0;
-  if (depth <= 0) return evaluateBoard(s);
+  if (depth <= 0) return _quiesce(s, alpha, beta, maximizing, 3);
   final moves = s.allLegalMoves(s.turn);
   if (moves.isEmpty) return evaluateBoard(s);
   _orderMoves(s, moves);
@@ -122,11 +122,89 @@ int _search(GameState s, int depth, int alpha, int beta, bool maximizing) {
 }
 
 void _orderMoves(GameState s, List<ChessMove> moves) {
-  moves.sort((a, b) {
-    final capA = s.at(a.toR, a.toC) != null || a.isEnPassant ? 1 : 0;
-    final capB = s.at(b.toR, b.toC) != null || b.isEnPassant ? 1 : 0;
-    return capB - capA;
-  });
+  moves.sort((a, b) => _moveScore(s, b).compareTo(_moveScore(s, a)));
+}
+
+/// MVV-LVA: korban termahal dulu, penyerang termurah dulu.
+/// Promosi dan rokade ikut dihitung agar tidak tenggelam.
+int _moveScore(GameState s, ChessMove m) {
+  final attacker = s.at(m.fromR, m.fromC);
+  final victim = m.isEnPassant
+      ? s.at(m.fromR, m.toC)
+      : s.at(m.toR, m.toC);
+  var score = 0;
+  if (victim != null && attacker != null) {
+    score = 10000 +
+        _values[victim.type]! -
+        (_values[attacker.type]! ~/ 16);
+  }
+  if (m.promotion != null) score += _values[m.promotion!]!;
+  if (m.isCastleKingside || m.isCastleQueenside) score += 50;
+  return score;
+}
+
+/// Quiescence: di daun pohon hanya kejar tangkapan, supaya AI tidak
+/// menilai posisi tepat sebelum bidaknya dimakan (horizon effect).
+/// Kalau sedang skak, semua langkah penghindar dicari penuh.
+int _quiesce(GameState s, int alpha, int beta, bool maximizing, int qd) {
+  if (s.isInCheck(s.turn)) {
+    final evasions = s.allLegalMoves(s.turn);
+    if (evasions.isEmpty) return maximizing ? -100000 : 100000;
+    if (qd <= 0) return evaluateBoard(s);
+    _orderMoves(s, evasions);
+    if (maximizing) {
+      var value = -1000000;
+      for (final m in evasions) {
+        final copy = GameState.clone(s);
+        copy.apply(m);
+        value = max(value, _quiesce(copy, alpha, beta, false, qd - 1));
+        alpha = max(alpha, value);
+        if (alpha >= beta) break;
+      }
+      return value;
+    } else {
+      var value = 1000000;
+      for (final m in evasions) {
+        final copy = GameState.clone(s);
+        copy.apply(m);
+        value = min(value, _quiesce(copy, alpha, beta, true, qd - 1));
+        beta = min(beta, value);
+        if (beta <= alpha) break;
+      }
+      return value;
+    }
+  }
+  final stand = evaluateBoard(s);
+  if (maximizing) {
+    if (stand >= beta) return beta;
+    if (stand > alpha) alpha = stand;
+  } else {
+    if (stand <= alpha) return alpha;
+    if (stand < beta) beta = stand;
+  }
+  if (qd <= 0) return stand;
+  final captures = s
+      .allLegalMoves(s.turn)
+      .where((m) => s.at(m.toR, m.toC) != null || m.isEnPassant)
+      .toList();
+  _orderMoves(s, captures);
+  if (maximizing) {
+    for (final m in captures) {
+      final copy = GameState.clone(s);
+      copy.apply(m);
+      alpha = max(alpha, _quiesce(copy, alpha, beta, false, qd - 1));
+      if (alpha >= beta) break;
+    }
+    return alpha;
+  } else {
+    for (final m in captures) {
+      final copy = GameState.clone(s);
+      copy.apply(m);
+      beta = min(beta, _quiesce(copy, alpha, beta, true, qd - 1));
+      if (beta <= alpha) break;
+    }
+    return beta;
+  }
 }
 
 ChessMove? computeAiMove(AiRequest req) =>

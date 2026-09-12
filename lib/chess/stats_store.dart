@@ -3,6 +3,10 @@ import 'ai.dart';
 import 'piece.dart';
 
 class StatsStore {
+  /// Satu-satunya instance yang dipakai aplikasi. Dimuat sekali di
+  /// main() sebelum runApp, jadi pencatatan tanpa load-per-panggil.
+  static final StatsStore instance = StatsStore();
+
   static const _aiWin = 'ai_win_';
   static const _aiDraw = 'ai_draw_';
   static const _aiLoss = 'ai_loss_';

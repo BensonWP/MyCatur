@@ -6,31 +6,19 @@ class HowToPlayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(GoldTheme.gap20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Cara main',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Gerak bidak.',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8),
+              Text('Cara main', style: text.headlineSmall),
+              const SizedBox(height: GoldTheme.gap16),
+              Text('Gerak bidak.',
+                  style: text.titleLarge?.copyWith(fontSize: 16)),
+              const SizedBox(height: GoldTheme.gap8),
               _PieceRow(
                   glyph: '♙', name: 'Pion', move: 'Maju satu petak, dua dari awal. Makan diagonal.'),
               _PieceRow(
@@ -43,32 +31,20 @@ class HowToPlayScreen extends StatelessWidget {
                   glyph: '♕', name: 'Menteri', move: 'Lurus dan diagonal, bidak paling bebas.'),
               _PieceRow(
                   glyph: '♔', name: 'Raja', move: 'Satu petak ke segala arah. Jangan biarkan dimakan.'),
-              SizedBox(height: 16),
-              Text(
-                'Aturan khusus.',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8),
+              const SizedBox(height: GoldTheme.gap16),
+              Text('Aturan khusus.',
+                  style: text.titleLarge?.copyWith(fontSize: 16)),
+              const SizedBox(height: GoldTheme.gap8),
               _RuleText(
                   'Rokade: raja dan benteng yang belum bergerak bisa bertukar tempat jika tidak skak dan jalurnya kosong.'),
               _RuleText(
                   'En passant: pion yang maju dua petak bisa dimakan pion lawan seolah maju satu.'),
               _RuleText(
                   'Promosi: pion yang sampai ujung berubah jadi menteri, benteng, gajah, atau kuda.'),
-              SizedBox(height: 16),
-              Text(
-                'Akhir permainan.',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              SizedBox(height: 8),
+              const SizedBox(height: GoldTheme.gap16),
+              Text('Akhir permainan.',
+                  style: text.titleLarge?.copyWith(fontSize: 16)),
+              const SizedBox(height: GoldTheme.gap8),
               _RuleText(
                   'Skakmat: raja diserang dan tidak bisa lolos. Pemenangnya yang mematikan.'),
               _RuleText(
@@ -95,30 +71,18 @@ class _PieceRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: GoldTheme.gap8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 36,
-            child: Text(
-              glyph,
-              style: const TextStyle(
-                color: GoldTheme.creamText,
-                fontSize: 26,
-              ),
-            ),
+            child: Text(glyph, style: text.headlineSmall),
           ),
           Expanded(
-            child: Text(
-              '$name. $move',
-              style: const TextStyle(
-                color: GoldTheme.creamText,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
+            child: Text('$name. $move', style: text.bodyMedium),
           ),
         ],
       ),
@@ -133,15 +97,8 @@ class _RuleText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: GoldTheme.creamText,
-          fontSize: 14,
-          height: 1.5,
-        ),
-      ),
+      padding: const EdgeInsets.only(bottom: GoldTheme.gap8),
+      child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
     );
   }
 }

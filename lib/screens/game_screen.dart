@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../chess/ai.dart';
+import '../chess/app_prefs.dart';
 import '../chess/chess_clock.dart';
 import '../chess/game_settings.dart';
 import '../chess/game_state.dart';
@@ -30,6 +31,9 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late GameState state;
+  final List<GameState> _past = [];
+  final List<ChessMove> _moves = [];
+  final List<bool> _captures = [];
   int? selR;
   int? selC;
   List<ChessMove> targets = [];
@@ -58,8 +62,31 @@ class _GameScreenState extends State<GameScreen> {
         if (c.flagged != null) _onFlag(c.flagged!);
       });
     });
+    _loadSettings();
     if (widget.vsAi && state.turn != widget.humanColor) {
       _aiMove();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final s = await AppPrefs.loadGame();
+    if (!mounted) return;
+    setState(() {
+      settings = s;
+      if (history.isEmpty && resultText == null) _initClock();
+    });
+  }
+
+  void _saveSettings() => unawaited(AppPrefs.saveGame(settings));
+
+  void _initClock() {
+    if (settings.clock == ClockOption.tanpa) {
+      clock = null;
+    } else {
+      clock = ChessClock(
+        initialMs: settings.clock.initialMs,
+        incrementMs: settings.clock.incrementMs,
+      );
     }
   }
 
@@ -71,6 +98,12 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   PieceColor get aiColor => widget.humanColor.opposite;
+
+  /// Warna pemain yang duduk di sisi atas layar (mengikuti putaran papan).
+  PieceColor get _topColor =>
+      flipped ? PieceColor.white : PieceColor.black;
+
+  bool get canUndo => _past.isNotEmpty && !thinking && resultText == null;
 
   void _onTap(int r, int c) {
     if (thinking || resultText != null) return;
@@ -101,15 +134,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _askPromotion(List<ChessMove> options) async {
-    modalOpen = true;
     final choice = await showDialog<PieceType>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: GoldTheme.frame,
-        title: const Text(
-          'Pilih promosi pion',
-          style: TextStyle(color: GoldTheme.creamText),
-        ),
+        title: const Text('Pilih promosi pion'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -120,21 +148,25 @@ class _GameScreenState extends State<GameScreen> {
               PieceType.knight
             ])
               ListTile(
-                title: Text(
-                  _promoName(t),
-                  style: const TextStyle(color: GoldTheme.creamText),
+                leading: Text(
+                  _promoGlyph(t, state.turn),
+                  style: const TextStyle(fontSize: 28),
                 ),
+                title: Text(_promoName(t)),
                 onTap: () => Navigator.of(context).pop(t),
               ),
           ],
         ),
       ),
     );
-    modalOpen = false;
-    if (choice != null) {
+    if (choice != null && mounted) {
       final m = options.firstWhere((e) => e.promotion == choice);
       _doMove(m);
     }
+  }
+
+  static String _promoGlyph(PieceType t, PieceColor color) {
+    return Piece(color, t).glyphSolid;
   }
 
   static String _promoName(PieceType t) {
@@ -154,16 +186,21 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _doMove(ChessMove m) {
+    if (resultText != null) return;
     final movingWhite = state.turn == PieceColor.white;
     final mover = state.turn;
     final number = state.fullmove;
+    final sanText = state.san(m);
     final wasCapture =
         state.at(m.toR, m.toC) != null || m.isEnPassant;
     setState(() {
+      _past.add(GameState.clone(state));
+      _moves.add(m);
+      _captures.add(wasCapture);
       state.apply(m);
       lastMove = m;
       lastWasCapture = wasCapture;
-      history.add(m.label(number, movingWhite));
+      history.add(movingWhite ? '$number. $sanText' : '$number... $sanText');
       selR = selC = null;
       targets = [];
       final c = clock;
@@ -176,6 +213,59 @@ class _GameScreenState extends State<GameScreen> {
     if (resultText == null && widget.vsAi && state.turn != widget.humanColor) {
       _aiMove();
     }
+  }
+
+  void _undo() {
+    if (!canUndo) return;
+    var restored = _past.removeLast();
+    history.removeLast();
+    _moves.removeLast();
+    _captures.removeLast();
+    if (widget.vsAi &&
+        restored.turn != widget.humanColor &&
+        _past.isNotEmpty) {
+      restored = _past.removeLast();
+      history.removeLast();
+      _moves.removeLast();
+      _captures.removeLast();
+    }
+    setState(() {
+      state = restored;
+      lastMove = _moves.isEmpty ? null : _moves.last;
+      lastWasCapture = _captures.isEmpty ? false : _captures.last;
+      selR = selC = null;
+      targets = [];
+    });
+    if (widget.vsAi && state.turn != widget.humanColor) _aiMove();
+  }
+
+  Future<void> _resign() async {
+    if (resultText != null || thinking) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Menyerah?'),
+        content: const Text('Kekalahan dicatat ke statistik.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Menyerah'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final winner = widget.vsAi ? aiColor : state.turn.opposite;
+    _finishGame(
+      text: winner == PieceColor.white
+          ? 'Putih menang karena lawan menyerah.'
+          : 'Hitam menang karena lawan menyerah.',
+      winner: winner,
+    );
   }
 
   Future<void> _aiMove() async {
@@ -203,62 +293,52 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _recordResult({required PieceColor? winner}) {
-    final store = StatsStore();
     if (widget.vsAi) {
       final humanScore = winner == null
           ? 0
           : (winner == widget.humanColor ? 1 : -1);
-      store.load().then((_) => store.recordAi(
-            level: widget.level,
-            humanScore: humanScore,
-          ));
+      unawaited(StatsStore.instance.recordAi(
+        level: widget.level,
+        humanScore: humanScore,
+      ));
     } else {
-      store.load().then((_) => store.recordTwoPlayer(winner: winner));
+      unawaited(StatsStore.instance.recordTwoPlayer(winner: winner));
     }
   }
 
-  void _onFlag(PieceColor flagged) {
-    final winner = flagged.opposite;
-    final text = flagged == PieceColor.white
-        ? 'Putih kehabisan waktu. Hitam menang.'
-        : 'Hitam kehabisan waktu. Putih menang.';
+  void _finishGame({required String text, required PieceColor? winner}) {
     setState(() => resultText = text);
     _recordResult(winner: winner);
     _showEndDialog(text);
   }
 
+  void _onFlag(PieceColor flagged) {
+    _finishGame(
+      text: flagged == PieceColor.white
+          ? 'Putih kehabisan waktu. Hitam menang.'
+          : 'Hitam kehabisan waktu. Putih menang.',
+      winner: flagged.opposite,
+    );
+  }
+
   void _checkEnd() {
     final res = state.result();
-    String? text;
     switch (res) {
       case GameResult.whiteWins:
-        text = 'Putih menang dengan skakmat.';
-        break;
+        _finishGame(text: 'Putih menang dengan skakmat.', winner: PieceColor.white);
       case GameResult.blackWins:
-        text = 'Hitam menang dengan skakmat.';
-        break;
+        _finishGame(text: 'Hitam menang dengan skakmat.', winner: PieceColor.black);
       case GameResult.drawStalemate:
-        text = 'Seri karena stalemate.';
-        break;
+        _finishGame(text: 'Seri karena stalemate.', winner: null);
       case GameResult.drawFifty:
-        text = 'Seri karena 50 langkah tanpa pion atau tangkapan.';
-        break;
+        _finishGame(
+            text: 'Seri karena 50 langkah tanpa pion atau tangkapan.',
+            winner: null);
       case GameResult.drawRepetition:
-        text = 'Seri karena posisi berulang tiga kali.';
-        break;
+        _finishGame(
+            text: 'Seri karena posisi berulang tiga kali.', winner: null);
       case GameResult.ongoing:
-        text = null;
-    }
-    if (text != null) {
-      setState(() => resultText = text);
-      if (res == GameResult.whiteWins) {
-        _recordResult(winner: PieceColor.white);
-      } else if (res == GameResult.blackWins) {
-        _recordResult(winner: PieceColor.black);
-      } else {
-        _recordResult(winner: null);
-      }
-      _showEndDialog(text);
+        break;
     }
   }
 
@@ -267,15 +347,8 @@ class _GameScreenState extends State<GameScreen> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: GoldTheme.frame,
-        title: const Text(
-          'Permainan selesai',
-          style: TextStyle(color: GoldTheme.creamText),
-        ),
-        content: Text(
-          text,
-          style: const TextStyle(color: GoldTheme.creamText),
-        ),
+        title: const Text('Permainan selesai'),
+        content: Text(text),
         actions: [
           TextButton(
             onPressed: () {
@@ -299,6 +372,9 @@ class _GameScreenState extends State<GameScreen> {
   void _restart() {
     setState(() {
       state = GameState();
+      _past.clear();
+      _moves.clear();
+      _captures.clear();
       selR = selC = null;
       targets = [];
       lastMove = null;
@@ -306,14 +382,7 @@ class _GameScreenState extends State<GameScreen> {
       history.clear();
       resultText = null;
       thinking = false;
-      if (settings.clock != ClockOption.tanpa) {
-        clock = ChessClock(
-          initialMs: settings.clock.initialMs,
-          incrementMs: settings.clock.incrementMs,
-        );
-      } else {
-        clock = null;
-      }
+      _initClock();
     });
     if (widget.vsAi && state.turn != widget.humanColor) _aiMove();
   }
@@ -321,178 +390,40 @@ class _GameScreenState extends State<GameScreen> {
   void _openHistory() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: GoldTheme.frame,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Riwayat langkah',
-                style: TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                history.isEmpty
-                    ? 'Belum ada langkah'
-                    : '${history.length} langkah',
-                style: const TextStyle(
-                  color: GoldTheme.creamText,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: history.isEmpty
-                    ? const Text(
-                        'Belum ada langkah. Mulai dengan memindahkan bidak.',
-                        style: TextStyle(
-                          color: GoldTheme.creamText,
-                          fontSize: 13,
-                        ),
-                      )
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: history.length,
-                        itemBuilder: (context, i) => Text(
-                          history[i],
-                          style: const TextStyle(
-                            color: GoldTheme.creamText,
-                            fontSize: 13,
-                            height: 1.6,
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Tutup'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openSettings() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: GoldTheme.frame,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      builder: (context) => SafeArea(
-        child: StatefulBuilder(
-          builder: (context, setSheet) => SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+      builder: (context) {
+        final text = Theme.of(context).textTheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(GoldTheme.gap16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Pengaturan',
-                  style: TextStyle(
-                    color: GoldTheme.creamText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Text('Riwayat langkah', style: text.titleLarge),
+                const SizedBox(height: GoldTheme.gap4),
+                Text(
+                  history.isEmpty
+                      ? 'Belum ada langkah'
+                      : '${history.length} langkah',
+                  style: text.titleSmall,
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Tempo main.',
-                  style: TextStyle(
-                      color: GoldTheme.creamText, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: Tempo.values.map((t) {
-                    return Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: OutlinedButton(
-                          onPressed: settings.tempo == t
-                              ? null
-                              : () {
-                                  setSheet(() {});
-                                  setState(() => settings.tempo = t);
-                                  Navigator.of(context).pop();
-                                  _openSettings();
-                                },
-                          child: Text(t.label),
+                const SizedBox(height: GoldTheme.gap12),
+                Flexible(
+                  child: history.isEmpty
+                      ? Text(
+                          'Belum ada langkah. Mulai dengan memindahkan bidak.',
+                          style: text.bodyMedium,
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: history.length,
+                          itemBuilder: (context, i) => Text(
+                            history[i],
+                            style: text.bodyMedium,
+                          ),
                         ),
-                      ),
-                    );
-                  }).toList(),
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Jam catur. Mengganti jam memulai ulang permainan.',
-                  style: TextStyle(
-                      color: GoldTheme.creamText, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                for (final c in ClockOption.values)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton(
-                      onPressed: settings.clock == c
-                          ? null
-                          : () {
-                              setState(() => settings.clock = c);
-                              Navigator.of(context).pop();
-                              _restart();
-                            },
-                      child: Text(c.label),
-                    ),
-                  ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Animasi.',
-                  style: TextStyle(
-                      color: GoldTheme.creamText, fontSize: 13),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: !settings.animation
-                            ? null
-                            : () {
-                                setState(
-                                    () => settings.animation = true);
-                                Navigator.of(context).pop();
-                              },
-                        child: const Text('Aktif'),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: settings.animation
-                            ? null
-                            : () {
-                                setState(
-                                    () => settings.animation = false);
-                                Navigator.of(context).pop();
-                              },
-                        child: const Text('Mati'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: GoldTheme.gap8),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Tutup'),
@@ -500,31 +431,179 @@ class _GameScreenState extends State<GameScreen> {
               ],
             ),
           ),
-        ),
-      ),
+        );
+      },
+    );
+  }
+
+  void _openSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        final text = Theme.of(context).textTheme;
+        return SafeArea(
+          child: StatefulBuilder(
+            builder: (context, setSheet) => SingleChildScrollView(
+              padding: const EdgeInsets.all(GoldTheme.gap16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Pengaturan', style: text.titleLarge),
+                  const SizedBox(height: GoldTheme.gap12),
+                  Text('Tempo main.', style: text.titleSmall),
+                  const SizedBox(height: GoldTheme.gap8),
+                  Row(
+                    children: Tempo.values.map((t) {
+                      return Expanded(
+                        child: Padding(
+                          padding:
+                              const EdgeInsets.only(right: GoldTheme.gap8),
+                          child: OutlinedButton(
+                            onPressed: settings.tempo == t
+                                ? null
+                                : () {
+                                    setSheet(() {});
+                                    setState(() => settings.tempo = t);
+                                    _saveSettings();
+                                    Navigator.of(context).pop();
+                                    _openSettings();
+                                  },
+                            child: Text(t.label),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: GoldTheme.gap12),
+                  Text(
+                    'Jam catur. Mengganti jam memulai ulang permainan.',
+                    style: text.titleSmall,
+                  ),
+                  const SizedBox(height: GoldTheme.gap8),
+                  for (final c in ClockOption.values)
+                    Padding(
+                      padding:
+                          const EdgeInsets.only(bottom: GoldTheme.gap8),
+                      child: OutlinedButton(
+                        onPressed: settings.clock == c
+                            ? null
+                            : () {
+                                setState(() => settings.clock = c);
+                                _saveSettings();
+                                Navigator.of(context).pop();
+                                _restart();
+                              },
+                        child: Text(c.label),
+                      ),
+                    ),
+                  const SizedBox(height: GoldTheme.gap4),
+                  Text('Animasi.', style: text.titleSmall),
+                  const SizedBox(height: GoldTheme.gap8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: !settings.animation
+                              ? null
+                              : () {
+                                  setState(
+                                      () => settings.animation = true);
+                                  _saveSettings();
+                                  Navigator.of(context).pop();
+                                },
+                          child: const Text('Aktif'),
+                        ),
+                      ),
+                      const SizedBox(width: GoldTheme.gap8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: settings.animation
+                              ? null
+                              : () {
+                                  setState(
+                                      () => settings.animation = false);
+                                  _saveSettings();
+                                  Navigator.of(context).pop();
+                                },
+                          child: const Text('Mati'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: GoldTheme.gap8),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Tutup'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
   String get _status {
-    final turnText = state.turn == PieceColor.white
-        ? 'Giliran Putih'
-        : 'Giliran Hitam';
-    return resultText ??
-        (thinking ? 'Komputer sedang berpikir' : turnText);
+    if (resultText != null) return resultText!;
+    if (thinking) return 'Komputer sedang berpikir';
+    return state.turn == PieceColor.white ? 'Giliran Putih' : 'Giliran Hitam';
   }
 
-  Widget _statusLine() {
+  Widget _playerCard(PieceColor color) {
+    final text = Theme.of(context).textTheme;
     final c = clock;
-    final buffer = StringBuffer(_status);
-    if (c != null) {
-      buffer.write(
-          '  Putih ${ChessClock.format(c.whiteMs)} Hitam ${ChessClock.format(c.blackMs)}');
-    }
-    return Text(
-      buffer.toString(),
-      style: const TextStyle(
-        color: GoldTheme.creamText,
-        fontSize: 12,
+    final active = resultText == null && state.turn == color;
+    final name = widget.vsAi
+        ? (color == widget.humanColor ? 'Kamu' : 'Komputer')
+        : (color == PieceColor.white ? 'Putih' : 'Hitam');
+    final side =
+        color == PieceColor.white ? 'Putih' : 'Hitam';
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: GoldTheme.gap12,
+        vertical: GoldTheme.gap8,
+      ),
+      decoration: BoxDecoration(
+        color: GoldTheme.frame,
+        borderRadius: BorderRadius.circular(GoldTheme.radiusCard),
+        border: Border.all(
+          color: active ? GoldTheme.accent : Colors.transparent,
+          width: 2,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color == PieceColor.white
+                  ? GoldTheme.creamText
+                  : Colors.black,
+              border: Border.all(color: GoldTheme.creamText),
+            ),
+          ),
+          const SizedBox(width: GoldTheme.gap8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(name, style: text.titleMedium),
+              if (widget.vsAi) Text(side, style: text.bodySmall),
+            ],
+          ),
+          const Spacer(),
+          if (c != null)
+            Text(
+              ChessClock.format(
+                color == PieceColor.white ? c.whiteMs : c.blackMs,
+              ),
+              style: text.titleLarge,
+            ),
+        ],
       ),
     );
   }
@@ -546,6 +625,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _topBar() {
+    final text = Theme.of(context).textTheme;
     return Container(
       color: Colors.black.withValues(alpha: 0.45),
       child: Row(
@@ -560,21 +640,25 @@ class _GameScreenState extends State<GameScreen> {
           Expanded(
             child: Text(
               widget.vsAi ? 'Lawan komputer' : 'Main berdua',
-              style: const TextStyle(
-                color: GoldTheme.creamText,
-                fontSize: 13,
-              ),
+              style: text.titleSmall,
             ),
           ),
           if (thinking)
             const Padding(
-              padding: EdgeInsets.only(right: 4),
+              padding: EdgeInsets.only(right: GoldTheme.gap4),
               child: SizedBox(
                 width: 12,
                 height: 12,
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.undo, size: 20),
+            color: GoldTheme.creamText,
+            tooltip: 'Urungkan',
+            visualDensity: VisualDensity.compact,
+            onPressed: canUndo ? _undo : null,
+          ),
           IconButton(
             icon: const Icon(Icons.history, size: 20),
             color: GoldTheme.creamText,
@@ -591,23 +675,28 @@ class _GameScreenState extends State<GameScreen> {
           ),
           PopupMenuButton<String>(
             iconSize: 20,
-            color: GoldTheme.frame,
             tooltip: 'Opsi lain',
             onSelected: (value) {
               if (value == 'baru') {
                 _restart();
               } else if (value == 'putar') {
                 setState(() => flipped = !flipped);
+              } else if (value == 'menyerah') {
+                _resign();
               }
             },
             itemBuilder: (context) => const [
               PopupMenuItem(
                 value: 'baru',
-                child: Text('Langkah baru'),
+                child: Text('Main baru'),
               ),
               PopupMenuItem(
                 value: 'putar',
                 child: Text('Putar papan'),
+              ),
+              PopupMenuItem(
+                value: 'menyerah',
+                child: Text('Menyerah'),
               ),
             ],
           ),
@@ -617,22 +706,41 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _portrait() {
+    final text = Theme.of(context).textTheme;
     return Column(
       children: [
         _topBar(),
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: _statusLine(),
+          padding: const EdgeInsets.fromLTRB(
+            GoldTheme.gap8,
+            GoldTheme.gap8,
+            GoldTheme.gap8,
+            GoldTheme.gap4,
           ),
+          child: _playerCard(_topColor),
         ),
         Expanded(
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(GoldTheme.gap4),
               child: _board(),
             ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            GoldTheme.gap8,
+            GoldTheme.gap4,
+            GoldTheme.gap8,
+            GoldTheme.gap8,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _playerCard(_topColor.opposite),
+              const SizedBox(height: GoldTheme.gap4),
+              Text(_status, style: text.bodySmall),
+            ],
           ),
         ),
       ],
@@ -640,6 +748,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Widget _landscape() {
+    final text = Theme.of(context).textTheme;
     final recent = history.length <= 3
         ? history
         : history.sublist(history.length - 3);
@@ -654,7 +763,7 @@ class _GameScreenState extends State<GameScreen> {
                 flex: 3,
                 child: Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(GoldTheme.gap4),
                     child: AspectRatio(
                       aspectRatio: 1,
                       child: _board(),
@@ -665,37 +774,27 @@ class _GameScreenState extends State<GameScreen> {
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(0, 6, 8, 8),
+                  padding: const EdgeInsets.fromLTRB(
+                    0,
+                    GoldTheme.gap8,
+                    GoldTheme.gap8,
+                    GoldTheme.gap8,
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _statusLine(),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Langkah terakhir.',
-                        style: TextStyle(
-                          color: GoldTheme.creamText,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
+                      _playerCard(_topColor),
+                      const SizedBox(height: GoldTheme.gap8),
+                      _playerCard(_topColor.opposite),
+                      const SizedBox(height: GoldTheme.gap8),
+                      Text(_status, style: text.bodySmall),
+                      const SizedBox(height: GoldTheme.gap8),
+                      Text('Langkah terakhir.', style: text.titleSmall),
+                      const SizedBox(height: GoldTheme.gap4),
                       if (recent.isEmpty)
-                        const Text(
-                          'Belum ada langkah.',
-                          style: TextStyle(
-                            color: GoldTheme.creamText,
-                            fontSize: 13,
-                          ),
-                        ),
+                        Text('Belum ada langkah.', style: text.bodyMedium),
                       for (final h in recent)
-                        Text(
-                          h,
-                          style: const TextStyle(
-                            color: GoldTheme.creamText,
-                            fontSize: 13,
-                            height: 1.6,
-                          ),
-                        ),
+                        Text(h, style: text.bodyMedium),
                     ],
                   ),
                 ),

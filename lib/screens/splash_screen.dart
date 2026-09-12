@@ -22,7 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
         _go();
         return;
       }
-      _timer = Timer(const Duration(milliseconds: 900), _go);
+      _timer = Timer(const Duration(milliseconds: 600), _go);
     });
   }
 
@@ -58,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen> {
               );
             },
             child: Image.asset(
-              'logo.png',
+              'assets/logo.png',
               width: 160,
               height: 160,
               semanticLabel: 'Logo MyCatur',

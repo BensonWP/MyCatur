@@ -33,6 +33,7 @@ class GameState {
     epC = other.epC;
     halfmove = other.halfmove;
     fullmove = other.fullmove;
+    _positionCounts.addAll(other._positionCounts);
   }
 
   void reset() {
@@ -286,13 +287,6 @@ class GameState {
             if (rook != null &&
                 rook.type == PieceType.rook &&
                 rook.color == p.color) {
-              out.add(const ChessMove(
-                  fromR: 0,
-                  fromC: 0,
-                  toR: 0,
-                  toC: 0,
-                  isCastleKingside: true));
-              out.removeLast();
               out.add(ChessMove(
                   fromR: r,
                   fromC: c,
@@ -460,6 +454,78 @@ class GameState {
       case PieceType.pawn:
         return 'p';
     }
+  }
+
+  static const _sanLetter = {
+    PieceType.king: 'R',
+    PieceType.queen: 'M',
+    PieceType.rook: 'B',
+    PieceType.bishop: 'G',
+    PieceType.knight: 'K',
+    PieceType.pawn: '',
+  };
+
+  /// Notasi SAN dengan huruf Indonesia (R/M/B/G/K).
+  /// Panggil sebelum [apply]: memakai papan pra-langkah untuk
+  /// disambiguasi dan papan pasca-langkah untuk sufiks skak/mat.
+  String san(ChessMove m) {
+    if (m.isCastleKingside) return 'O-O${_checkSuffix(m)}';
+    if (m.isCastleQueenside) return 'O-O-O${_checkSuffix(m)}';
+    final p = board[m.fromR][m.fromC];
+    if (p == null) return m.squareTo;
+    final capture = board[m.toR][m.toC] != null || m.isEnPassant;
+    final sb = StringBuffer();
+    if (p.type == PieceType.pawn) {
+      if (capture) {
+        sb.write(String.fromCharCode(97 + m.fromC));
+        sb.write('x');
+      }
+      sb.write(m.squareTo);
+      if (m.promotion != null) {
+        sb.write('=${_sanLetter[m.promotion]!}');
+      }
+    } else {
+      sb.write(_sanLetter[p.type]!);
+      sb.write(_disambiguation(p, m));
+      if (capture) sb.write('x');
+      sb.write(m.squareTo);
+    }
+    sb.write(_checkSuffix(m));
+    return sb.toString();
+  }
+
+  String _disambiguation(Piece p, ChessMove m) {
+    var sameFile = false;
+    var sameRank = false;
+    var clash = false;
+    for (var r = 0; r < 8; r++) {
+      for (var c = 0; c < 8; c++) {
+        if (r == m.fromR && c == m.fromC) continue;
+        final q = board[r][c];
+        if (q == null || q.color != p.color || q.type != p.type) continue;
+        final reaches = pseudoMoves(r, c).any((x) =>
+            x.toR == m.toR && x.toC == m.toC && x.promotion == m.promotion);
+        if (!reaches) continue;
+        final copy = GameState.clone(this);
+        copy._apply(ChessMove(fromR: r, fromC: c, toR: m.toR, toC: m.toC));
+        if (copy.isInCheck(p.color)) continue;
+        clash = true;
+        if (c == m.fromC) sameFile = true;
+        if (r == m.fromR) sameRank = true;
+      }
+    }
+    if (!clash) return '';
+    if (!sameFile) return String.fromCharCode(97 + m.fromC);
+    if (!sameRank) return '${8 - m.fromR}';
+    return '${String.fromCharCode(97 + m.fromC)}${8 - m.fromR}';
+  }
+
+  String _checkSuffix(ChessMove m) {
+    final copy = GameState.clone(this);
+    copy._apply(m);
+    final enemy = turn.opposite;
+    if (!copy.isInCheck(enemy)) return '';
+    return copy.allLegalMoves(enemy).isEmpty ? '#' : '+';
   }
 
   GameResult result() {
